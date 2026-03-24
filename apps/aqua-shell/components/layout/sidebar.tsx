@@ -50,15 +50,15 @@ export function Sidebar() {
     <aside className="w-64 min-h-screen bg-white border-r border-border flex flex-col">
       {/* Logo */}
       <div className="p-5 border-b border-border">
-        <div className="flex items-center gap-3">
+        <Link href="/dashboard" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
           <div className="w-9 h-9 rounded-xl aqua-gradient flex items-center justify-center text-white font-bold text-base flex-shrink-0">
             A
           </div>
           <div>
-            <div className="font-bold text-foreground text-base leading-tight">AQUA HRMS</div>
+            <div className="font-bold text-foreground text-base leading-tight">AQUA SUITE</div>
             <div className="text-[10px] text-muted-foreground">Human Resource Management</div>
           </div>
-        </div>
+        </Link>
       </div>
 
       {/* Tenant badge */}

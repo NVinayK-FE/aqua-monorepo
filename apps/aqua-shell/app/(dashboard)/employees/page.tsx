@@ -6,17 +6,21 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ChartTableToggle } from '@/components/charts/chart-table-toggle'
+import { InviteEmployeeModal } from '@/components/employees/invite-employee-modal'
+import type { InvitePayload } from '@/components/employees/invite-employee-modal'
 import {
   BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis,
   CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts'
 import {
-  Search, Plus, Filter, Download, MoreHorizontal,
-  MapPin, Briefcase, Mail, Phone, Users, TrendingUp,
+  Search, UserPlus, Filter, Download, MoreHorizontal,
+  MapPin, Briefcase, Mail, Phone, Users, TrendingUp, Clock,
 } from 'lucide-react'
 import { EMPLOYEES, DEPARTMENTS, departmentHeadcount } from '@/lib/mock-data'
 import { formatCurrency, getInitials, getAvatarColor, CHART_COLORS } from '@/lib/utils'
 import type { Employee, EmployeeStatus } from '@/types'
+
+// ─── Static config ────────────────────────────────────────────────────────────
 
 const DEPT_COLORS = [
   CHART_COLORS.primary, CHART_COLORS.secondary, CHART_COLORS.accent,
@@ -24,63 +28,129 @@ const DEPT_COLORS = [
   CHART_COLORS.pink, CHART_COLORS.indigo,
 ]
 
-const STATUS_CONFIG: Record<EmployeeStatus, { label: string; class: string }> = {
-  active: { label: 'Active', class: 'badge-active' },
-  inactive: { label: 'Inactive', class: 'badge-inactive' },
-  on_leave: { label: 'On Leave', class: 'badge-pending' },
-  terminated: { label: 'Terminated', class: 'badge-rejected' },
+const STATUS_CONFIG: Record<EmployeeStatus | 'invited', { label: string; class: string }> = {
+  active:     { label: 'Active',      class: 'badge-active' },
+  inactive:   { label: 'Inactive',    class: 'badge-inactive' },
+  on_leave:   { label: 'On Leave',    class: 'badge-pending' },
+  terminated: { label: 'Terminated',  class: 'badge-rejected' },
+  invited:    { label: 'Invited',     class: 'badge-invited' },
 }
 
-const EMP_TYPE_LABELS = {
+const EMP_TYPE_LABELS: Record<string, string> = {
   full_time: 'Full Time',
   part_time: 'Part Time',
-  contract: 'Contract',
-  intern: 'Intern',
+  contract:  'Contract',
+  intern:    'Intern',
+}
+
+const ROLE_LABELS: Record<string, string> = {
+  employee: 'Employee',
+  manager:  'Manager',
+  hr_admin: 'HR Admin',
 }
 
 const employmentTypeData = [
   { name: 'Full Time', value: 142 },
   { name: 'Part Time', value: 18 },
-  { name: 'Contract', value: 12 },
-  { name: 'Intern', value: 4 },
+  { name: 'Contract',  value: 12 },
+  { name: 'Intern',    value: 4 },
 ]
 
-export default function EmployeesPage() {
-  const [search, setSearch] = useState('')
-  const [deptFilter, setDeptFilter] = useState('all')
-  const [statusFilter, setStatusFilter] = useState('all')
+// ─── Component ────────────────────────────────────────────────────────────────
 
-  const filtered = EMPLOYEES.filter((e) => {
-    const fullName = `${e.firstName} ${e.lastName}`.toLowerCase()
-    const matchSearch = !search || fullName.includes(search.toLowerCase()) ||
-      e.email.toLowerCase().includes(search.toLowerCase()) ||
-      e.position.toLowerCase().includes(search.toLowerCase())
-    const matchDept = deptFilter === 'all' || e.department === deptFilter
-    const matchStatus = statusFilter === 'all' || e.status === statusFilter
+export default function EmployeesPage() {
+  const [search, setSearch]             = useState('')
+  const [deptFilter, setDeptFilter]     = useState('all')
+  const [statusFilter, setStatusFilter] = useState('all')
+  const [inviteOpen, setInviteOpen]     = useState(false)
+  const [invites, setInvites]           = useState<InvitePayload[]>([])
+
+  // Current tenant (would come from auth context in a real app)
+  const TENANT_ID   = 'acme'
+  const TENANT_NAME = 'Acme Corporation'
+
+  // Merge real employees + pending invites into a single list
+  const allRows = [
+    ...EMPLOYEES,
+    ...invites.map((inv) => ({
+      id:             inv.id,
+      tenantId:       inv.tenantId,
+      employeeId:     `INV-${inv.id.slice(-4).toUpperCase()}`,
+      firstName:      inv.firstName,
+      lastName:       inv.lastName,
+      email:          inv.email,
+      phone:          '—',
+      department:     inv.department,
+      position:       inv.position,
+      employmentType: inv.employmentType,
+      status:         'invited' as const,
+      hireDate:       inv.startDate,
+      salary:         0,
+      currency:       'USD',
+      location:       '—',
+      skills:         [],
+      performanceScore: 0,
+      managerId:      undefined,
+      _isInvite:      true,
+      _role:          inv.role,
+    })),
+  ]
+
+  const filtered = allRows.filter((e) => {
+    const fullName   = `${e.firstName} ${e.lastName}`.toLowerCase()
+    const matchSearch  = !search
+      || fullName.includes(search.toLowerCase())
+      || e.email.toLowerCase().includes(search.toLowerCase())
+      || e.position.toLowerCase().includes(search.toLowerCase())
+    const matchDept    = deptFilter === 'all'    || e.department === deptFilter
+    const matchStatus  = statusFilter === 'all'  || e.status === statusFilter
     return matchSearch && matchDept && matchStatus
   })
+
+  const handleInviteSent = (invite: InvitePayload) => {
+    setInvites((prev) => [invite, ...prev])
+  }
+
+  const totalCount = EMPLOYEES.length + invites.length
 
   return (
     <div className="flex flex-col flex-1">
       <Header
         title="Employees"
-        subtitle="Manage your workforce — 176 employees across 8 departments"
+        subtitle={`Manage your workforce — ${totalCount} employees across 8 departments`}
         actions={
-          <Button size="sm">
-            <Plus className="w-3.5 h-3.5" />
-            Add Employee
+          <Button size="sm" onClick={() => setInviteOpen(true)}>
+            <UserPlus className="w-3.5 h-3.5" />
+            Invite Employee
           </Button>
         }
       />
 
       <div className="flex-1 overflow-y-auto p-6 space-y-6">
-        {/* Summary KPIs */}
+
+        {/* ── Pending invites banner ───────────────────────────────────── */}
+        {invites.length > 0 && (
+          <div className="flex items-center gap-3 px-4 py-3 rounded-xl border border-amber-200 bg-amber-50 text-sm">
+            <Clock className="w-4 h-4 text-amber-500 flex-shrink-0" />
+            <span className="text-amber-800 font-medium">
+              {invites.length} pending invite{invites.length > 1 ? 's' : ''} — awaiting acceptance
+            </span>
+            <button
+              onClick={() => setStatusFilter('invited')}
+              className="ml-auto text-xs text-amber-700 underline hover:text-amber-900 transition-colors"
+            >
+              View all
+            </button>
+          </div>
+        )}
+
+        {/* ── KPI cards ────────────────────────────────────────────────── */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           {[
-            { label: 'Total Employees', value: 176, icon: Users, color: 'text-cyan-600', bg: 'bg-cyan-50' },
-            { label: 'Active', value: 162, icon: Users, color: 'text-emerald-600', bg: 'bg-emerald-50' },
-            { label: 'On Leave', value: 12, icon: Users, color: 'text-amber-600', bg: 'bg-amber-50' },
-            { label: 'New This Month', value: 5, icon: TrendingUp, color: 'text-purple-600', bg: 'bg-purple-50' },
+            { label: 'Total Employees', value: totalCount,          icon: Users,       color: 'text-cyan-600',   bg: 'bg-cyan-50'   },
+            { label: 'Active',          value: 162,                 icon: Users,       color: 'text-emerald-600',bg: 'bg-emerald-50'},
+            { label: 'On Leave',        value: 12,                  icon: Users,       color: 'text-amber-600',  bg: 'bg-amber-50'  },
+            { label: 'Pending Invites', value: invites.length,      icon: UserPlus,    color: 'text-purple-600', bg: 'bg-purple-50' },
           ].map((s) => (
             <div key={s.label} className="stat-card">
               <div className="flex items-center justify-between">
@@ -96,7 +166,7 @@ export default function EmployeesPage() {
           ))}
         </div>
 
-        {/* Charts row */}
+        {/* ── Charts ───────────────────────────────────────────────────── */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <Card>
             <CardHeader className="pb-2">
@@ -197,7 +267,7 @@ export default function EmployeesPage() {
           </Card>
         </div>
 
-        {/* Employee list */}
+        {/* ── Employee table ────────────────────────────────────────────── */}
         <Card>
           <CardHeader className="pb-3">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -240,6 +310,7 @@ export default function EmployeesPage() {
                   <option value="active">Active</option>
                   <option value="on_leave">On Leave</option>
                   <option value="inactive">Inactive</option>
+                  <option value="invited">Invited</option>
                 </select>
 
                 <Button variant="outline" size="sm">
@@ -266,15 +337,22 @@ export default function EmployeesPage() {
                 </thead>
                 <tbody>
                   {filtered.map((emp) => {
-                    const initials = getInitials(`${emp.firstName} ${emp.lastName}`)
-                    const avatarClass = getAvatarColor(emp.firstName)
-                    const statusConf = STATUS_CONFIG[emp.status]
+                    const isInvite    = (emp as any)._isInvite === true
+                    const initials    = getInitials(`${emp.firstName} ${emp.lastName}`)
+                    const avatarClass = isInvite ? 'bg-amber-100 text-amber-700' : getAvatarColor(emp.firstName)
+                    const statusKey   = isInvite ? 'invited' : emp.status as EmployeeStatus
+                    const statusConf  = STATUS_CONFIG[statusKey]
+
                     return (
-                      <tr key={emp.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
+                      <tr
+                        key={emp.id}
+                        className={`border-b border-border last:border-0 hover:bg-muted/30 transition-colors ${isInvite ? 'opacity-80' : ''}`}
+                      >
+                        {/* Employee */}
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-3">
                             <div className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-semibold flex-shrink-0 ${avatarClass}`}>
-                              {initials}
+                              {isInvite ? '✉' : initials}
                             </div>
                             <div>
                               <p className="text-sm font-semibold text-foreground">
@@ -282,47 +360,86 @@ export default function EmployeesPage() {
                               </p>
                               <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
                                 <span>{emp.employeeId}</span>
-                                <span>·</span>
-                                <MapPin className="w-3 h-3" />
-                                <span>{emp.location}</span>
+                                {isInvite ? (
+                                  <>
+                                    <span>·</span>
+                                    <Mail className="w-3 h-3" />
+                                    <span>{emp.email}</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <span>·</span>
+                                    <MapPin className="w-3 h-3" />
+                                    <span>{emp.location}</span>
+                                  </>
+                                )}
                               </p>
                             </div>
                           </div>
                         </td>
+
+                        {/* Department */}
                         <td className="px-4 py-4">
                           <span className="text-sm text-foreground">{emp.department}</span>
                         </td>
+
+                        {/* Position */}
                         <td className="px-4 py-4">
-                          <span className="text-sm text-foreground">{emp.position}</span>
+                          <div>
+                            <span className="text-sm text-foreground">{emp.position}</span>
+                            {isInvite && (
+                              <p className="text-xs text-muted-foreground mt-0.5">
+                                {ROLE_LABELS[(emp as any)._role] ?? ''}
+                              </p>
+                            )}
+                          </div>
                         </td>
+
+                        {/* Type */}
                         <td className="px-4 py-4">
                           <Badge variant="muted" className="text-xs">
-                            {EMP_TYPE_LABELS[emp.employmentType]}
+                            {EMP_TYPE_LABELS[emp.employmentType] ?? emp.employmentType}
                           </Badge>
                         </td>
+
+                        {/* Status */}
                         <td className="px-4 py-4">
                           <span className={statusConf.class}>{statusConf.label}</span>
                         </td>
+
+                        {/* Salary */}
                         <td className="px-4 py-4 text-right">
-                          <span className="text-sm font-medium text-foreground">
-                            {formatCurrency(emp.salary)}
-                          </span>
+                          {isInvite ? (
+                            <span className="text-xs text-muted-foreground italic">Pending</span>
+                          ) : (
+                            <span className="text-sm font-medium text-foreground">
+                              {formatCurrency(emp.salary)}
+                            </span>
+                          )}
                         </td>
+
+                        {/* Performance */}
                         <td className="px-4 py-4 text-center">
-                          <div className="flex items-center justify-center gap-1">
-                            <span className="text-sm font-semibold text-foreground">{emp.performanceScore}</span>
-                            <div className="flex">
-                              {[1, 2, 3, 4, 5].map((s) => (
-                                <div
-                                  key={s}
-                                  className={`w-2 h-2 rounded-sm mx-0.5 ${
-                                    s <= Math.round(emp.performanceScore) ? 'bg-amber-400' : 'bg-muted'
-                                  }`}
-                                />
-                              ))}
+                          {isInvite ? (
+                            <span className="text-xs text-muted-foreground italic">—</span>
+                          ) : (
+                            <div className="flex items-center justify-center gap-1">
+                              <span className="text-sm font-semibold text-foreground">{emp.performanceScore}</span>
+                              <div className="flex">
+                                {[1, 2, 3, 4, 5].map((s) => (
+                                  <div
+                                    key={s}
+                                    className={`w-2 h-2 rounded-sm mx-0.5 ${
+                                      s <= Math.round(emp.performanceScore) ? 'bg-amber-400' : 'bg-muted'
+                                    }`}
+                                  />
+                                ))}
+                              </div>
                             </div>
-                          </div>
+                          )}
                         </td>
+
+                        {/* Actions */}
                         <td className="px-4 py-4">
                           <button className="w-8 h-8 rounded-lg hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors">
                             <MoreHorizontal className="w-4 h-4" />
@@ -346,7 +463,7 @@ export default function EmployeesPage() {
             {/* Pagination */}
             <div className="flex items-center justify-between px-6 py-4 border-t border-border">
               <p className="text-xs text-muted-foreground">
-                Showing {filtered.length} of 176 employees
+                Showing {filtered.length} of {totalCount} employees
               </p>
               <div className="flex items-center gap-1">
                 {[1, 2, 3, '...', 15].map((p, i) => (
@@ -366,6 +483,15 @@ export default function EmployeesPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* ── Invite modal ──────────────────────────────────────────────────── */}
+      <InviteEmployeeModal
+        open={inviteOpen}
+        tenantId={TENANT_ID}
+        tenantName={TENANT_NAME}
+        onClose={() => setInviteOpen(false)}
+        onInviteSent={handleInviteSent}
+      />
     </div>
   )
 }

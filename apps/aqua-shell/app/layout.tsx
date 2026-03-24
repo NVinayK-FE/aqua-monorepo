@@ -3,8 +3,8 @@ import './globals.css'
 import { Toaster } from '@/components/ui/sonner'
 
 export const metadata: Metadata = {
-  title: 'AQUA HRMS — Human Resource Management System',
-  description: 'Modern multi-tenant HRMS platform for managing employees, payroll, leave, and performance.',
+  title: 'AQUA SUITE — Human Resource Management System',
+  description: 'Modern multi-tenant HR platform for managing employees, payroll, leave, and performance.',
   icons: {
     icon: '/favicon.ico',
   },

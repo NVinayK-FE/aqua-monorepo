@@ -146,7 +146,7 @@ export default function LoginPage() {
             </button>
 
             <p className="text-center text-xs text-muted-foreground">
-              New to AQUA HRMS?{' '}
+              New to AQUA SUITE?{' '}
               <Link href="/register" className="text-primary font-medium hover:underline">
                 Start free trial
               </Link>
@@ -241,7 +241,7 @@ export default function LoginPage() {
                   Authenticating...
                 </>
               ) : (
-                'Sign in to AQUA HRMS'
+                'Sign in to AQUA SUITE'
               )}
             </button>
 
@@ -266,7 +266,7 @@ export default function LoginPage() {
           </form>
 
           <p className="mt-6 text-center text-xs text-muted-foreground">
-            By signing in, you agree to AQUA HRMS{' '}
+            By signing in, you agree to AQUA SUITE{' '}
             <Link href="/terms" className="text-primary hover:underline">Terms</Link> and{' '}
             <Link href="/privacy" className="text-primary hover:underline">Privacy Policy</Link>
           </p>

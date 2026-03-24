@@ -16,7 +16,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
             A
           </div>
           <div>
-            <div className="text-xl font-bold tracking-tight">AQUA HRMS</div>
+            <div className="text-xl font-bold tracking-tight">AQUA SUITE</div>
             <div className="text-xs text-white/70">Human Resource Management</div>
           </div>
         </div>
@@ -28,7 +28,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
             <span className="text-white/80">smarter, faster, better.</span>
           </h1>
           <p className="text-white/80 text-lg leading-relaxed max-w-md">
-            AQUA HRMS brings all your HR operations under one roof — from hiring to payroll to performance, designed for modern teams.
+            AQUA SUITE brings all your HR operations under one roof — from hiring to payroll to performance, designed for modern teams.
           </p>
 
           <div className="grid grid-cols-3 gap-4 pt-4">
@@ -72,7 +72,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
             <div className="w-9 h-9 rounded-xl aqua-gradient flex items-center justify-center text-white font-bold text-lg">
               A
             </div>
-            <span className="text-xl font-bold">AQUA HRMS</span>
+            <span className="text-xl font-bold">AQUA SUITE</span>
           </div>
           {children}
         </div>
