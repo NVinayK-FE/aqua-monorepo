@@ -15,6 +15,7 @@ import {
   LogOut,
   HelpCircle,
   Bell,
+  PartyPopper,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -30,8 +31,9 @@ const NAV_ITEMS = [
     items: [
       { label: 'Employees', href: '/employees', icon: Users },
       { label: 'Payroll', href: '/payroll', icon: DollarSign },
-      { label: 'Leave & Attendance', href: '/leave', icon: Calendar },
-      { label: 'Performance', href: '/performance', icon: Star },
+      { label: 'Leave & Attendance', href: '/leave',     icon: Calendar     },
+      { label: 'Performance',       href: '/performance',icon: Star         },
+      { label: 'Holidays',          href: '/holidays',   icon: PartyPopper  },
     ],
   },
   {
