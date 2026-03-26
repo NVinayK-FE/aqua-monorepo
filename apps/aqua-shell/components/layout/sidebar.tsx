@@ -12,9 +12,6 @@ import {
   CreditCard,
   ChevronDown,
   Building2,
-  LogOut,
-  HelpCircle,
-  Bell,
   PartyPopper,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -110,18 +107,9 @@ export function Sidebar() {
         ))}
       </nav>
 
-      {/* Bottom section */}
-      <div className="p-4 border-t border-border space-y-1">
-        <button className="nav-item nav-item-inactive w-full">
-          <HelpCircle className="w-4 h-4" />
-          Help & Support
-        </button>
-        <button className="nav-item nav-item-inactive w-full">
-          <LogOut className="w-4 h-4" />
-          Sign out
-        </button>
-        {/* User */}
-        <div className="flex items-center gap-3 px-2 py-2 mt-2 rounded-lg hover:bg-muted cursor-pointer transition-colors">
+      {/* Bottom section — user card only; Sign Out & Help moved to header profile dropdown */}
+      <div className="p-4 border-t border-border">
+        <div className="flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-muted cursor-pointer transition-colors">
           <div className="w-8 h-8 rounded-full aqua-gradient flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
             JO
           </div>

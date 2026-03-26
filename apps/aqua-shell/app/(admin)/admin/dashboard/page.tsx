@@ -1,19 +1,43 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import {
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
-  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
+  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts'
 import {
-  Building2, CreditCard, Users, TrendingUp, TrendingDown,
+  Building2, CreditCard, TrendingUp, TrendingDown,
   Activity, Globe, AlertCircle, CheckCircle2, Clock,
-  MoreHorizontal, Search, ArrowUpRight,
+  MoreHorizontal, Search, ArrowUpRight, Users,
+  UserCheck, Briefcase, BookOpen, ShoppingBag, Filter, X,
 } from 'lucide-react'
+import {
+  AQUA_PRODUCTS, ADMIN_TENANTS, ADMIN_USERS, ADMIN_SUBSCRIPTIONS,
+  PLAN_BADGE, STATUS_BADGE, fmtMoney, fmtDate,
+  type AquaProductId,
+} from '@/lib/admin-data'
+import { useAdminFilter } from '@/lib/admin-filter-context'
 
-// ─── Mock data ────────────────────────────────────────────────────────────────
+// ─── Product icon map ─────────────────────────────────────────────────────────
 
-const MRR_TREND = [
+const PRODUCT_ICONS: Record<AquaProductId, React.ElementType> = {
+  hr:    UserCheck,
+  crm:   Briefcase,
+  books: BookOpen,
+  store: ShoppingBag,
+}
+
+// ─── Plan colours (stable) ───────────────────────────────────────────────────
+
+const PLAN_COLORS: Record<string, string> = {
+  Starter:    '#b2ebf2',
+  Growth:     '#00bcd4',
+  Enterprise: '#006064',
+}
+
+// ─── Full-platform baseline trend (for "All" view + scaling) ─────────────────
+
+const BASE_MRR_TREND = [
   { month: 'Oct', mrr: 142000, tenants: 1180 },
   { month: 'Nov', mrr: 148000, tenants: 1195 },
   { month: 'Dec', mrr: 151000, tenants: 1205 },
@@ -22,44 +46,11 @@ const MRR_TREND = [
   { month: 'Mar', mrr: 169000, tenants: 1247 },
 ]
 
-const PLAN_DIST = [
-  { name: 'Starter',    value: 612, color: '#b2ebf2', mrr: 5508  },
-  { name: 'Growth',     value: 498, color: '#00bcd4', mrr: 9462  },
-  { name: 'Enterprise', value: 137, color: '#006064', mrr: 41100 },
-]
-
-const TENANT_STATUS = [
-  { status: 'Active',      count: 893, color: '#10b981' },
-  { status: 'Free Trial',  count: 354, color: '#f59e0b' },
-  { status: 'Suspended',   count: 21,  color: '#ef4444' },
-  { status: 'Churned',     count: 0,   color: '#9ca3af' },
-]
-
-const RECENT_TENANTS = [
-  { id: 'T-1247', name: 'NovaTech Inc.',        plan: 'Growth',     employees: 120, status: 'trial',    joined: '2026-03-22', mrr: 1900  },
-  { id: 'T-1246', name: 'BlueSky Analytics',    plan: 'Starter',    employees: 18,  status: 'active',   joined: '2026-03-20', mrr: 162   },
-  { id: 'T-1245', name: 'Meridian Health',       plan: 'Enterprise', employees: 540, status: 'active',   joined: '2026-03-18', mrr: 10800 },
-  { id: 'T-1244', name: 'Apex Logistics',        plan: 'Growth',     employees: 95,  status: 'active',   joined: '2026-03-15', mrr: 1805  },
-  { id: 'T-1243', name: 'Sunrise Education',     plan: 'Starter',    employees: 34,  status: 'trial',    joined: '2026-03-14', mrr: 0     },
-  { id: 'T-1242', name: 'Peak Performance Ltd',  plan: 'Growth',     employees: 210, status: 'active',   joined: '2026-03-10', mrr: 3990  },
-  { id: 'T-1241', name: 'CloudBridge Systems',   plan: 'Enterprise', employees: 820, status: 'active',   joined: '2026-03-08', mrr: 16400 },
-]
-
-const PLAN_COLOR: Record<string, string> = {
-  Starter:    'bg-cyan-100 text-cyan-700',
-  Growth:     'bg-primary/10 text-primary',
-  Enterprise: 'bg-teal-900/10 text-teal-800',
-}
-
-const STATUS_CONF: Record<string, { label: string; cls: string }> = {
-  active:    { label: 'Active',    cls: 'badge-active'   },
-  trial:     { label: 'Trial',     cls: 'badge-pending'  },
-  suspended: { label: 'Suspended', cls: 'badge-rejected' },
-}
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function fmt(n: number) {
-  if (n >= 1000000) return `$${(n / 1000000).toFixed(1)}M`
-  if (n >= 1000)    return `$${(n / 1000).toFixed(0)}K`
+  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`
+  if (n >= 1_000)     return `$${(n / 1_000).toFixed(0)}K`
   return `$${n}`
 }
 
@@ -67,66 +58,184 @@ function fmt(n: number) {
 
 export default function AdminDashboardPage() {
   const [search, setSearch] = useState('')
+  const { productFilter, setProductFilter } = useAdminFilter()
 
-  const filtered = RECENT_TENANTS.filter(
-    (t) =>
-      !search ||
-      t.name.toLowerCase().includes(search.toLowerCase()) ||
-      t.plan.toLowerCase().includes(search.toLowerCase())
+  // ── Scoped tenants / users / subs ─────────────────────────────────────────
+  const scopedTenants = useMemo(
+    () => productFilter === 'all'
+      ? ADMIN_TENANTS
+      : ADMIN_TENANTS.filter((t) => t.products.includes(productFilter)),
+    [productFilter]
   )
 
-  const totalMRR    = MRR_TREND[MRR_TREND.length - 1].mrr
-  const prevMRR     = MRR_TREND[MRR_TREND.length - 2].mrr
-  const mrrGrowth   = (((totalMRR - prevMRR) / prevMRR) * 100).toFixed(1)
-  const totalTenants = MRR_TREND[MRR_TREND.length - 1].tenants
-  const prevTenants  = MRR_TREND[MRR_TREND.length - 2].tenants
+  const scopedUserCount = useMemo(
+    () => ADMIN_USERS.filter((u) => scopedTenants.some((t) => t.id === u.tenantId)).length,
+    [scopedTenants]
+  )
+
+  const scopedSubIds = useMemo(
+    () => new Set(scopedTenants.map((t) => t.id)),
+    [scopedTenants]
+  )
+  const scopedSubs = useMemo(
+    () => ADMIN_SUBSCRIPTIONS.filter((s) => scopedSubIds.has(s.tenantId)),
+    [scopedSubIds]
+  )
+
+  const activeProductMeta = productFilter !== 'all'
+    ? AQUA_PRODUCTS.find((p) => p.id === productFilter) ?? null
+    : null
+
+  // ── Live KPIs from scoped data ────────────────────────────────────────────
+  const scopedMRR      = scopedTenants.reduce((a, t) => a + t.mrr, 0)
+  const scopedActive   = scopedTenants.filter((t) => t.status === 'active').length
+  const scopedTrials   = scopedTenants.filter((t) => t.status === 'trial').length
+  const scopedSuspended = scopedTenants.filter((t) => t.status === 'suspended').length
+  const scopedCancelled = scopedTenants.filter((t) => t.status === 'cancelled').length
+  const scopedTenantCt = scopedTenants.length
+  const scopedEmployees = scopedTenants.reduce((a, t) => a + t.employees, 0)
+  const avgEmployees   = scopedTenantCt > 0 ? Math.round(scopedEmployees / scopedTenantCt) : 0
+  const scopedPastDue  = scopedSubs.filter((s) => s.status === 'past_due').length
+
+  // ── MRR trend — scale global trend by scoped/total ratio ─────────────────
+  const totalBaseMRR = BASE_MRR_TREND[BASE_MRR_TREND.length - 1].mrr
+  const mrrTrend = useMemo(() => {
+    if (productFilter === 'all') return BASE_MRR_TREND
+    const ratio = totalBaseMRR > 0 ? scopedMRR / totalBaseMRR : 0
+    // Apply a slight ramp so earlier months are proportionally lower
+    return BASE_MRR_TREND.map((d, i) => ({
+      ...d,
+      mrr:     Math.round(d.mrr     * ratio * (0.82 + i * 0.036)),
+      tenants: Math.round(d.tenants * (scopedTenantCt / 1247) * (0.82 + i * 0.036)),
+    }))
+  }, [productFilter, scopedMRR, scopedTenantCt])
+
+  const latestMRR  = mrrTrend[mrrTrend.length - 1].mrr
+  const prevMRR    = mrrTrend[mrrTrend.length - 2].mrr
+  const mrrGrowth  = prevMRR > 0 ? (((latestMRR - prevMRR) / prevMRR) * 100).toFixed(1) : '0.0'
+  const latestTens = mrrTrend[mrrTrend.length - 1].tenants
+  const prevTens   = mrrTrend[mrrTrend.length - 2].tenants
+
+  // ── Plan breakdown from scoped tenants ───────────────────────────────────
+  const planDist = useMemo(() =>
+    ['Starter', 'Growth', 'Enterprise'].map((p) => {
+      const ts = scopedTenants.filter((t) => t.plan === p)
+      return {
+        name:  p,
+        value: ts.length,
+        color: PLAN_COLORS[p],
+        mrr:   ts.reduce((a, t) => a + t.mrr, 0),
+      }
+    }),
+    [scopedTenants]
+  )
+
+  // ── Status breakdown from scoped tenants ─────────────────────────────────
+  const statusData = [
+    { status: 'Active',     count: scopedActive,    color: '#10b981' },
+    { status: 'Free Trial', count: scopedTrials,    color: '#f59e0b' },
+    { status: 'Suspended',  count: scopedSuspended, color: '#ef4444' },
+    { status: 'Cancelled',  count: scopedCancelled, color: '#9ca3af' },
+  ]
+
+  // ── Product adoption bar — highlight selected ─────────────────────────────
+  const adoptionChart = AQUA_PRODUCTS.map((p) => {
+    const ts = scopedTenants.filter((t) => t.products.includes(p.id))
+    return {
+      name:    p.name.replace('Aqua ', ''),
+      tenants: ts.length,
+      color:   p.color,
+      id:      p.id,
+    }
+  })
+
+  // ── Recent tenants ────────────────────────────────────────────────────────
+  const recentTenants = useMemo(
+    () => [...scopedTenants]
+      .sort((a, b) => new Date(b.joined).getTime() - new Date(a.joined).getTime())
+      .slice(0, 7),
+    [scopedTenants]
+  )
+
+  const tableRows = recentTenants.filter(
+    (t) => !search ||
+      t.name.toLowerCase().includes(search.toLowerCase()) ||
+      t.plan.toLowerCase().includes(search.toLowerCase()) ||
+      t.domain.toLowerCase().includes(search.toLowerCase())
+  )
+
+  // ── Product strip per-product stats ──────────────────────────────────────
+  function productCardStats(id: AquaProductId) {
+    const ts  = scopedTenants.filter((t) => t.products.includes(id))
+    const usr = ADMIN_USERS.filter((u) => ts.some((t) => t.id === u.tenantId)).length
+    return { tenants: ts.length, users: usr, mrr: ts.reduce((a, t) => a + t.mrr, 0) }
+  }
 
   return (
     <div className="flex flex-col flex-1">
-      {/* Header */}
+      {/* Page header */}
       <div className="flex items-center justify-between px-8 py-5 border-b border-border bg-white">
         <div>
-          <h1 className="text-xl font-bold text-foreground">Platform Overview</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">Real-time metrics across all tenants — March 2026</p>
+          <div className="flex items-center gap-2.5">
+            <h1 className="text-xl font-bold text-foreground">
+              {activeProductMeta ? `${activeProductMeta.name} Overview` : 'Platform Overview'}
+            </h1>
+            {activeProductMeta && (
+              <span
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border ${activeProductMeta.bg} ${activeProductMeta.textColor} ${activeProductMeta.border}`}
+              >
+                <Filter className="w-3 h-3" /> Filtered
+                <button
+                  onClick={() => setProductFilter('all')}
+                  className="ml-0.5 hover:opacity-70 transition-opacity"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
+          </div>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            {activeProductMeta
+              ? `${scopedTenantCt} tenants · ${scopedUserCount} users · ${fmt(scopedMRR)} MRR`
+              : 'Real-time metrics across all tenants and products — March 2026'}
+          </p>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="flex items-center gap-1.5 text-xs font-medium text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-full">
-            <Activity className="w-3 h-3" /> All systems operational
-          </span>
-        </div>
+        <span className="flex items-center gap-1.5 text-xs font-medium text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-full">
+          <Activity className="w-3 h-3" /> All systems operational
+        </span>
       </div>
 
       <div className="flex-1 overflow-y-auto p-8 space-y-6">
 
-        {/* KPI Cards */}
+        {/* ── Primary KPIs ──────────────────────────────────────────────── */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {[
             {
               label: 'Monthly Recurring Revenue',
-              value: fmt(totalMRR),
-              sub: `+${mrrGrowth}% vs last month`,
-              icon: TrendingUp,
+              value: fmt(latestMRR),
+              sub:   `+${mrrGrowth}% vs last month`,
+              icon:  TrendingUp,
               color: 'text-emerald-600', bg: 'bg-emerald-50', positive: true,
             },
             {
               label: 'Total Tenants',
-              value: totalTenants.toLocaleString(),
-              sub: `+${totalTenants - prevTenants} this month`,
-              icon: Building2,
+              value: latestTens.toLocaleString(),
+              sub:   `+${latestTens - prevTens} this month`,
+              icon:  Building2,
               color: 'text-cyan-600', bg: 'bg-cyan-50', positive: true,
             },
             {
               label: 'Active Subscriptions',
-              value: '893',
-              sub: '72% of total tenants',
-              icon: CreditCard,
+              value: String(scopedActive),
+              sub:   `${scopedTenantCt > 0 ? Math.round((scopedActive / scopedTenantCt) * 100) : 0}% of tenants`,
+              icon:  CreditCard,
               color: 'text-blue-600', bg: 'bg-blue-50', positive: true,
             },
             {
               label: 'Free Trials Active',
-              value: '354',
-              sub: '28% conversion target',
-              icon: Clock,
+              value: String(scopedTrials),
+              sub:   '14-day conversion window',
+              icon:  Clock,
               color: 'text-amber-600', bg: 'bg-amber-50', positive: null,
             },
           ].map((c) => (
@@ -134,7 +243,7 @@ export default function AdminDashboardPage() {
               <div className="flex items-start justify-between mb-3">
                 <p className="text-xs text-muted-foreground leading-tight">{c.label}</p>
                 <div className={`w-9 h-9 rounded-xl ${c.bg} flex items-center justify-center flex-shrink-0`}>
-                  <c.icon className={`w-4.5 h-4.5 ${c.color}`} />
+                  <c.icon className={`w-4 h-4 ${c.color}`} />
                 </div>
               </div>
               <p className="text-2xl font-bold text-foreground">{c.value}</p>
@@ -146,13 +255,29 @@ export default function AdminDashboardPage() {
           ))}
         </div>
 
-        {/* Secondary KPIs */}
+        {/* ── Secondary KPIs ────────────────────────────────────────────── */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {[
-            { label: 'Avg Employees / Tenant', value: '48', icon: Users,       color: 'text-purple-600', bg: 'bg-purple-50' },
-            { label: 'Churn Rate (30d)',        value: '1.8%', icon: TrendingDown, color: 'text-rose-600',  bg: 'bg-rose-50'   },
-            { label: 'Total Employees Managed', value: '59,856', icon: Globe,      color: 'text-teal-600',  bg: 'bg-teal-50'   },
-            { label: 'Support Tickets Open',    value: '14',   icon: AlertCircle, color: 'text-orange-600',bg: 'bg-orange-50' },
+            {
+              label: 'Avg Employees / Tenant',
+              value: avgEmployees.toLocaleString(),
+              icon:  Users, color: 'text-purple-600', bg: 'bg-purple-50',
+            },
+            {
+              label: 'Churn Rate (30d)',
+              value: scopedTenantCt > 0 ? `${((scopedCancelled / scopedTenantCt) * 100).toFixed(1)}%` : '0%',
+              icon:  TrendingDown, color: 'text-rose-600', bg: 'bg-rose-50',
+            },
+            {
+              label: 'Total Employees Managed',
+              value: scopedEmployees.toLocaleString(),
+              icon:  Globe, color: 'text-teal-600', bg: 'bg-teal-50',
+            },
+            {
+              label: productFilter === 'all' ? 'Support Tickets Open' : 'Past Due Subscriptions',
+              value: productFilter === 'all' ? '14' : String(scopedPastDue),
+              icon:  AlertCircle, color: 'text-orange-600', bg: 'bg-orange-50',
+            },
           ].map((c) => (
             <div key={c.label} className="stat-card">
               <div className="flex items-center justify-between">
@@ -161,28 +286,81 @@ export default function AdminDashboardPage() {
                   <p className="text-xl font-bold text-foreground mt-0.5">{c.value}</p>
                 </div>
                 <div className={`w-9 h-9 rounded-xl ${c.bg} flex items-center justify-center flex-shrink-0`}>
-                  <c.icon className={`w-4.5 h-4.5 ${c.color}`} />
+                  <c.icon className={`w-4 h-4 ${c.color}`} />
                 </div>
               </div>
             </div>
           ))}
         </div>
 
-        {/* Charts */}
+        {/* ── Product adoption strip ────────────────────────────────────── */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {AQUA_PRODUCTS.map((product) => {
+            const s    = productCardStats(product.id)
+            const PIco = PRODUCT_ICONS[product.id]
+            const isSelected = productFilter === product.id
+            const isDimmed   = productFilter !== 'all' && !isSelected
+            return (
+              <button
+                key={product.id}
+                onClick={() => setProductFilter(isSelected ? 'all' : product.id)}
+                className={`text-left rounded-xl border-2 p-4 transition-all duration-150 ${
+                  isSelected
+                    ? `${product.bg} ${product.border} shadow-md scale-[1.02]`
+                    : isDimmed
+                    ? 'border-border bg-white opacity-40 hover:opacity-70'
+                    : `border-border bg-white hover:${product.border} hover:${product.bg}`
+                }`}
+              >
+                <div className="flex items-center gap-3 mb-3">
+                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                    isSelected ? 'bg-white shadow-sm' : product.bg
+                  }`}>
+                    <PIco className={`w-4 h-4 ${product.textColor}`} />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold text-foreground">{product.name}</p>
+                    <p className="text-[10px] text-muted-foreground truncate">{product.tagline}</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-3 gap-2 text-center">
+                  <div>
+                    <p className={`text-lg font-extrabold ${product.textColor}`}>{s.tenants}</p>
+                    <p className="text-[10px] text-muted-foreground">Tenants</p>
+                  </div>
+                  <div>
+                    <p className={`text-lg font-extrabold ${product.textColor}`}>{s.users}</p>
+                    <p className="text-[10px] text-muted-foreground">Users</p>
+                  </div>
+                  <div>
+                    <p className={`text-lg font-extrabold ${product.textColor}`}>{fmt(s.mrr)}</p>
+                    <p className="text-[10px] text-muted-foreground">MRR</p>
+                  </div>
+                </div>
+              </button>
+            )
+          })}
+        </div>
+
+        {/* ── Charts row ────────────────────────────────────────────────── */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
 
           {/* MRR trend */}
           <div className="lg:col-span-2 bg-white rounded-xl border border-border p-5 shadow-sm">
             <div className="mb-4">
               <h3 className="font-semibold text-foreground">MRR Growth</h3>
-              <p className="text-xs text-muted-foreground">Monthly recurring revenue over the last 6 months</p>
+              <p className="text-xs text-muted-foreground">
+                {activeProductMeta
+                  ? `${activeProductMeta.name} monthly recurring revenue — last 6 months`
+                  : 'Platform-wide monthly recurring revenue — last 6 months'}
+              </p>
             </div>
             <ResponsiveContainer width="100%" height={200}>
-              <AreaChart data={MRR_TREND}>
+              <AreaChart data={mrrTrend}>
                 <defs>
                   <linearGradient id="mrrGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%"  stopColor="#00bcd4" stopOpacity={0.15} />
-                    <stop offset="95%" stopColor="#00bcd4" stopOpacity={0}    />
+                    <stop offset="5%"  stopColor={activeProductMeta?.color ?? '#00bcd4'} stopOpacity={0.18} />
+                    <stop offset="95%" stopColor={activeProductMeta?.color ?? '#00bcd4'} stopOpacity={0}    />
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
@@ -191,69 +369,122 @@ export default function AdminDashboardPage() {
                   tickFormatter={(v) => `$${(v / 1000).toFixed(0)}K`} />
                 <Tooltip formatter={(v: number) => [`$${v.toLocaleString()}`, 'MRR']} />
                 <Area type="monotone" dataKey="mrr" name="MRR"
-                  stroke="#00bcd4" strokeWidth={2.5} fill="url(#mrrGrad)" />
+                  stroke={activeProductMeta?.color ?? '#00bcd4'}
+                  strokeWidth={2.5}
+                  fill="url(#mrrGrad)" />
               </AreaChart>
             </ResponsiveContainer>
           </div>
 
-          {/* Plan distribution */}
+          {/* Plan distribution (live from scoped tenants) */}
           <div className="bg-white rounded-xl border border-border p-5 shadow-sm">
             <div className="mb-4">
               <h3 className="font-semibold text-foreground">Plans</h3>
-              <p className="text-xs text-muted-foreground">Tenants by subscription plan</p>
+              <p className="text-xs text-muted-foreground">
+                {activeProductMeta ? `${activeProductMeta.name} tenants by plan` : 'Tenants by subscription plan'}
+              </p>
             </div>
-            <ResponsiveContainer width="100%" height={140}>
-              <PieChart>
-                <Pie data={PLAN_DIST} cx="50%" cy="50%" innerRadius={40} outerRadius={60}
-                  dataKey="value" paddingAngle={3}>
-                  {PLAN_DIST.map((entry, i) => (
-                    <Cell key={i} fill={entry.color} />
+            {scopedTenantCt === 0 ? (
+              <div className="h-36 flex items-center justify-center text-muted-foreground text-xs">No data</div>
+            ) : (
+              <>
+                <ResponsiveContainer width="100%" height={140}>
+                  <PieChart>
+                    <Pie data={planDist} cx="50%" cy="50%" innerRadius={40} outerRadius={60}
+                      dataKey="value" paddingAngle={3}>
+                      {planDist.map((entry, i) => (
+                        <Cell key={i} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip formatter={(v, n) => [`${v} tenants`, n]} />
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="space-y-2.5 mt-2">
+                  {planDist.map((p) => (
+                    <div key={p.name} className="flex items-center gap-2 text-xs">
+                      <div className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ backgroundColor: p.color }} />
+                      <span className="text-muted-foreground flex-1">{p.name}</span>
+                      <span className="font-semibold text-foreground">{p.value}</span>
+                      <span className="text-muted-foreground">{fmt(p.mrr)}/mo</span>
+                    </div>
                   ))}
-                </Pie>
-                <Tooltip formatter={(v, n) => [`${v} tenants`, n]} />
-              </PieChart>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* ── Product adoption + Tenant status ──────────────────────────── */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+
+          {/* Product adoption bar — highlights selected product */}
+          <div className="bg-white rounded-xl border border-border p-5 shadow-sm">
+            <div className="mb-4">
+              <h3 className="font-semibold text-foreground">Product Adoption</h3>
+              <p className="text-xs text-muted-foreground">
+                {activeProductMeta
+                  ? `Tenants with ${activeProductMeta.name} also using other products`
+                  : 'Tenants subscribed per Aqua product'}
+              </p>
+            </div>
+            <ResponsiveContainer width="100%" height={160}>
+              <BarChart data={adoptionChart} barSize={36}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+                <XAxis dataKey="name" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
+                <Tooltip formatter={(v: number) => [`${v}`, 'Tenants']} />
+                <Bar dataKey="tenants" radius={[6, 6, 0, 0]}>
+                  {adoptionChart.map((entry, i) => (
+                    <Cell
+                      key={i}
+                      fill={entry.color}
+                      opacity={productFilter === 'all' || entry.id === productFilter ? 1 : 0.25}
+                    />
+                  ))}
+                </Bar>
+              </BarChart>
             </ResponsiveContainer>
-            <div className="space-y-2.5 mt-2">
-              {PLAN_DIST.map((p) => (
-                <div key={p.name} className="flex items-center gap-2 text-xs">
-                  <div className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ backgroundColor: p.color }} />
-                  <span className="text-muted-foreground flex-1">{p.name}</span>
-                  <span className="font-semibold text-foreground">{p.value}</span>
-                  <span className="text-muted-foreground">{fmt(p.mrr)}/mo</span>
+          </div>
+
+          {/* Tenant status breakdown (live) */}
+          <div className="bg-white rounded-xl border border-border p-5 shadow-sm">
+            <div className="mb-4">
+              <h3 className="font-semibold text-foreground">Tenant Status</h3>
+              <p className="text-xs text-muted-foreground">
+                {activeProductMeta
+                  ? `Account status breakdown for ${activeProductMeta.name} tenants`
+                  : 'Distribution of account statuses across the platform'}
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              {statusData.map((s) => (
+                <div key={s.status} className="flex items-center gap-3 p-4 rounded-xl border border-border">
+                  <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0"
+                    style={{ backgroundColor: s.color + '20' }}>
+                    <CheckCircle2 className="w-5 h-5" style={{ color: s.color }} />
+                  </div>
+                  <div>
+                    <div className="text-lg font-bold text-foreground">{s.count}</div>
+                    <div className="text-xs text-muted-foreground">{s.status}</div>
+                  </div>
                 </div>
               ))}
             </div>
           </div>
         </div>
 
-        {/* Status breakdown */}
-        <div className="bg-white rounded-xl border border-border p-5 shadow-sm">
-          <div className="mb-4">
-            <h3 className="font-semibold text-foreground">Tenant Status Breakdown</h3>
-            <p className="text-xs text-muted-foreground">Distribution of tenant account statuses</p>
-          </div>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            {TENANT_STATUS.map((s) => (
-              <div key={s.status} className="flex items-center gap-3 p-4 rounded-xl border border-border">
-                <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0"
-                  style={{ backgroundColor: s.color + '20' }}>
-                  <CheckCircle2 className="w-5 h-5" style={{ color: s.color }} />
-                </div>
-                <div>
-                  <div className="text-lg font-bold text-foreground">{s.count}</div>
-                  <div className="text-xs text-muted-foreground">{s.status}</div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Recent tenants table */}
+        {/* ── Recent tenants table ───────────────────────────────────────── */}
         <div className="bg-white rounded-xl border border-border shadow-sm overflow-hidden">
           <div className="flex items-center justify-between px-6 py-4 border-b border-border">
             <div>
-              <h3 className="font-semibold text-foreground">Recent Tenants</h3>
-              <p className="text-xs text-muted-foreground">Latest organisations to join the platform</p>
+              <h3 className="font-semibold text-foreground">
+                {activeProductMeta ? `Recent ${activeProductMeta.name} Tenants` : 'Recent Tenants'}
+              </h3>
+              <p className="text-xs text-muted-foreground">
+                {activeProductMeta
+                  ? `Latest ${activeProductMeta.name} organisations — ${scopedTenantCt} total`
+                  : 'Latest organisations to join the platform'}
+              </p>
             </div>
             <div className="flex items-center gap-2 bg-muted rounded-lg px-3 py-2 w-52">
               <Search className="w-3.5 h-3.5 text-muted-foreground" />
@@ -270,22 +501,29 @@ export default function AdminDashboardPage() {
             <table className="w-full data-table">
               <thead>
                 <tr>
-                  <th className="text-left px-6 py-3">Tenant</th>
-                  <th className="text-left px-4 py-3">Plan</th>
-                  <th className="text-right px-4 py-3">Employees</th>
-                  <th className="text-left px-4 py-3">Status</th>
-                  <th className="text-right px-4 py-3">MRR</th>
-                  <th className="text-left px-4 py-3">Joined</th>
+                  <th className="text-left px-6 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Tenant</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Plan</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Products</th>
+                  <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Employees</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Status</th>
+                  <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">MRR</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Joined</th>
                   <th className="px-4 py-3" />
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((t) => (
+                {tableRows.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="text-center py-10 text-muted-foreground text-sm">
+                      No tenants match your search
+                    </td>
+                  </tr>
+                ) : tableRows.map((t) => (
                   <tr key={t.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded-lg aqua-gradient flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
-                          {t.name[0]}
+                          {t.logo}
                         </div>
                         <div>
                           <p className="text-sm font-semibold text-foreground">{t.name}</p>
@@ -294,13 +532,29 @@ export default function AdminDashboardPage() {
                       </div>
                     </td>
                     <td className="px-4 py-4">
-                      <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${PLAN_COLOR[t.plan]}`}>
+                      <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${PLAN_BADGE[t.plan]}`}>
                         {t.plan}
                       </span>
                     </td>
+                    <td className="px-4 py-4">
+                      <div className="flex gap-1 flex-wrap">
+                        {t.products.map((pid) => {
+                          const p = AQUA_PRODUCTS.find((x) => x.id === pid)!
+                          const isActive = pid === productFilter
+                          return (
+                            <span key={pid}
+                              className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold transition-opacity ${p.bg} ${p.textColor} ${
+                                productFilter !== 'all' && !isActive ? 'opacity-30' : 'opacity-100'
+                              }`}>
+                              {p.name.replace('Aqua ', '')}
+                            </span>
+                          )
+                        })}
+                      </div>
+                    </td>
                     <td className="px-4 py-4 text-right text-sm font-medium text-foreground">{t.employees}</td>
                     <td className="px-4 py-4">
-                      <span className={STATUS_CONF[t.status].cls}>{STATUS_CONF[t.status].label}</span>
+                      <span className={STATUS_BADGE[t.status].cls}>{STATUS_BADGE[t.status].label}</span>
                     </td>
                     <td className="px-4 py-4 text-right">
                       <span className={`text-sm font-semibold ${t.mrr === 0 ? 'text-muted-foreground' : 'text-foreground'}`}>
@@ -308,7 +562,7 @@ export default function AdminDashboardPage() {
                       </span>
                     </td>
                     <td className="px-4 py-4 text-sm text-muted-foreground">
-                      {new Date(t.joined).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                      {fmtDate(t.joined)}
                     </td>
                     <td className="px-4 py-4">
                       <button className="w-8 h-8 rounded-lg hover:bg-muted flex items-center justify-center text-muted-foreground transition-colors">

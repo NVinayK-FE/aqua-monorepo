@@ -11,9 +11,10 @@ import {
   ResponsiveContainer, PieChart, Pie, Cell, Legend,
 } from 'recharts'
 import {
-  ADMIN_SUBSCRIPTIONS, PLAN_BADGE, STATUS_BADGE,
-  fmtMoney, fmtDate, AdminSubscription,
+  ADMIN_SUBSCRIPTIONS, ADMIN_TENANTS, AQUA_PRODUCTS, PLAN_BADGE, STATUS_BADGE,
+  fmtMoney, fmtDate, AdminSubscription, PRODUCT_MAP,
 } from '@/lib/admin-data'
+import { useAdminFilter } from '@/lib/admin-filter-context'
 
 // ─── MRR trend (last 6 months mock) ─────────────────────────────────────────
 const MRR_TREND = [
@@ -166,19 +167,29 @@ export default function SubscriptionsPage() {
   const [sortDir, setSortDir] = useState<SortDir>('asc')
   const [selected, setSelected] = useState<AdminSubscription | null>(null)
   const [overrides, setOverrides] = useState<Record<string, string>>({})
+  const { productFilter } = useAdminFilter()
 
-  const totalMRR = ADMIN_SUBSCRIPTIONS.reduce((s, x) => {
+  // Scope subscriptions to tenants matching the global product filter
+  const scopedTenantIds = productFilter === 'all'
+    ? null
+    : new Set(ADMIN_TENANTS.filter((t) => t.products.includes(productFilter)).map((t) => t.id))
+  const BASE_SUBS = scopedTenantIds
+    ? ADMIN_SUBSCRIPTIONS.filter((s) => scopedTenantIds.has(s.tenantId))
+    : ADMIN_SUBSCRIPTIONS
+  const activeProductMeta = productFilter !== 'all' ? PRODUCT_MAP[productFilter] : null
+
+  const totalMRR = BASE_SUBS.reduce((s, x) => {
     const mrr = x.billingCycle === 'annual' ? x.amount / 12 : x.amount
     return s + mrr
   }, 0)
-  const activeCount = ADMIN_SUBSCRIPTIONS.filter((s) => s.status === 'active').length
-  const trialCount  = ADMIN_SUBSCRIPTIONS.filter((s) => s.status === 'trial').length
-  const pastDue     = ADMIN_SUBSCRIPTIONS.filter((s) => s.status === 'past_due').length
+  const activeCount = BASE_SUBS.filter((s) => s.status === 'active').length
+  const trialCount  = BASE_SUBS.filter((s) => s.status === 'trial').length
+  const pastDue     = BASE_SUBS.filter((s) => s.status === 'past_due').length
 
   // Plan breakdown for pie
   const planTotals = ['Starter', 'Growth', 'Enterprise'].map((p) => ({
     name: p,
-    value: ADMIN_SUBSCRIPTIONS.filter((s) => s.plan === p).length,
+    value: BASE_SUBS.filter((s) => s.plan === p).length,
   }))
 
   const handleSort = (f: SortField) => {
@@ -193,7 +204,7 @@ export default function SubscriptionsPage() {
   }
 
   const rows = useMemo(() => {
-    let data = ADMIN_SUBSCRIPTIONS.map((s) => ({
+    let data = BASE_SUBS.map((s) => ({
       ...s,
       status: (overrides[s.id] as SubStatus) ?? s.status,
     }))
@@ -221,7 +232,7 @@ export default function SubscriptionsPage() {
       return 0
     })
     return data
-  }, [search, planFilter, statusFilter, sortField, sortDir, overrides])
+  }, [BASE_SUBS, search, planFilter, statusFilter, sortField, sortDir, overrides])
 
   const SortIcon = ({ field }: { field: SortField }) =>
     sortField === field
@@ -234,8 +245,19 @@ export default function SubscriptionsPage() {
     <div className="flex flex-col flex-1">
       {/* Header */}
       <div className="px-8 py-6 border-b border-border bg-white">
-        <h1 className="text-xl font-bold text-foreground">Subscriptions</h1>
-        <p className="text-sm text-muted-foreground mt-0.5">Manage all tenant subscriptions and billing</p>
+        <div className="flex items-center gap-2.5">
+          <h1 className="text-xl font-bold text-foreground">Subscriptions</h1>
+          {activeProductMeta && (
+            <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold border ${activeProductMeta.bg} ${activeProductMeta.textColor} ${activeProductMeta.border}`}>
+              {activeProductMeta.name}
+            </span>
+          )}
+        </div>
+        <p className="text-sm text-muted-foreground mt-0.5">
+          {activeProductMeta
+            ? `Showing subscriptions for tenants using ${activeProductMeta.name}`
+            : 'Manage all tenant subscriptions and billing'}
+        </p>
       </div>
 
       <div className="flex-1 overflow-y-auto p-8 space-y-6">
